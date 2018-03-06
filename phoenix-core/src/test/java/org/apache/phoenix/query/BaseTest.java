@@ -620,6 +620,8 @@ public abstract class BaseTest {
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
         conf.setInt("hbase.catalogjanitor.interval", 5000);
+        conf.setBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE);
+        conf.setBoolean(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, Boolean.TRUE);
         conf.setInt(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, 1000);
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
@@ -750,9 +752,9 @@ public abstract class BaseTest {
             throw new IllegalStateException("Used up all unique names");
         }
         TABLE_COUNTER.incrementAndGet();
-        return "N" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
+        return "N" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1) + "lowercase";
     }
-    
+
     private static AtomicInteger SEQ_NAME_SUFFIX = new AtomicInteger(0);
     private static final int MAX_SEQ_SUFFIX_VALUE = 1000000;
 
@@ -1320,7 +1322,7 @@ public abstract class BaseTest {
         if (tableName == null) {
             tableName = generateUniqueName();
         }
-        
+
         if (ts == null) {
             ensureTableCreated(url, tableName, ENTITY_HISTORY_TABLE_NAME, splits, null);
         } else {
@@ -1430,7 +1432,7 @@ public abstract class BaseTest {
         if (tableName == null) {
             tableName = generateUniqueName();
         }
-        
+
         if (ts == null) {
             ensureTableCreated(url, tableName, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, null);
         } else {
@@ -1794,7 +1796,7 @@ public abstract class BaseTest {
         }
         phxConn.close();
     }
-    
+
 
     /**
      *  Synchronously split table at the given split point
@@ -1807,7 +1809,7 @@ public abstract class BaseTest {
         admin.disableTable(fullTableName);
         admin.enableTable(fullTableName);
     }
-    
+
     /**
      * Returns true if the region contains atleast one of the metadata rows we are interested in
      */
@@ -1907,7 +1909,7 @@ public abstract class BaseTest {
 
         splitTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME, splitPoints);
     }
-    
+
     /**
      * Ensures each region of SYSTEM.CATALOG is on a different region server
      */
@@ -1917,7 +1919,7 @@ public abstract class BaseTest {
         MiniHBaseCluster cluster = util.getHBaseCluster();
         HMaster master = cluster.getMaster();
         AssignmentManager am = master.getAssignmentManager();
-   
+
         HRegionServer dstServer = util.getHBaseCluster().getRegionServer(dstServerName);
         HRegionServer srcServer = util.getHBaseCluster().getRegionServer(srcServerName);
         byte[] encodedRegionNameInBytes = regionInfo.getEncodedNameAsBytes();

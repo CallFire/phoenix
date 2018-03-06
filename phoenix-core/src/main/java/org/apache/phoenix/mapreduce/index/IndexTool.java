@@ -35,7 +35,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.google.common.base.Strings;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -53,17 +52,17 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat2;
-import org.apache.hadoop.hbase.tool.LoadIncrementalHFiles;
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.mapreduce.TableOutputFormat;
+import org.apache.hadoop.hbase.tool.LoadIncrementalHFiles;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.io.IntWritable;
@@ -89,6 +88,7 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -105,6 +105,7 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 
 /**
@@ -227,11 +228,11 @@ public class IndexTool extends Configured implements Tool {
 				&& !cmdLine.hasOption(OUTPUT_PATH_OPTION.getOpt())) {
 			throw new IllegalStateException(OUTPUT_PATH_OPTION.getLongOpt() + " is a mandatory " + "parameter");
 		}
-        
+
 		if (cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt()) && cmdLine.hasOption(INDEX_TABLE_OPTION.getOpt())) {
 			throw new IllegalStateException("Index name should not be passed with " + PARTIAL_REBUILD_OPTION.getLongOpt());
 		}
-        		
+
         if (!(cmdLine.hasOption(DIRECT_API_OPTION.getOpt())) && cmdLine.hasOption(INDEX_TABLE_OPTION.getOpt())
                 && cmdLine.hasOption(RUN_FOREGROUND_OPTION
                         .getOpt())) {
@@ -412,10 +413,8 @@ public class IndexTool extends Configured implements Tool {
             
         }
 
-        private Job configureJobForAysncIndex()
-
-                throws Exception {
-
+        private Job configureJobForAysncIndex() throws Exception {
+            final String indexTableName = SchemaUtil.getTableName(schemaName, indexTable);
             String physicalIndexTable = pIndexTable.getPhysicalName().getString();
             final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);
             final PostIndexDDLCompiler ddlCompiler =
@@ -424,7 +423,7 @@ public class IndexTool extends Configured implements Tool {
             final List<String> indexColumns = ddlCompiler.getIndexColumnNames();
             final String selectQuery = ddlCompiler.getSelectQuery();
             final String upsertQuery =
-                    QueryUtil.constructUpsertStatement(qIndexTable, indexColumns, Hint.NO_INDEX);
+                    QueryUtil.constructUpsertStatement(indexTableName.replace(':', '.'), indexColumns, Hint.NO_INDEX);
 
             configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
@@ -436,7 +435,7 @@ public class IndexTool extends Configured implements Tool {
                 PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
             }
             final List<ColumnInfo> columnMetadataList =
-                    PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
+                    PhoenixRuntime.generateColumnInfo(connection, indexTableName, indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
 
             fs = outputPath.getFileSystem(configuration);
@@ -455,7 +454,7 @@ public class IndexTool extends Configured implements Tool {
                 try {
                     admin = pConnection.getQueryServices().getAdmin();
                     String pdataTableName = pDataTable.getName().getString();
-                    snapshotName = new StringBuilder(pdataTableName).append("-Snapshot").toString();
+                    snapshotName = new StringBuilder(qDataTable).append("-Snapshot").toString();
                     admin.snapshot(snapshotName, TableName.valueOf(pdataTableName));
                 } finally {
                     if (admin != null) {
@@ -537,7 +536,7 @@ public class IndexTool extends Configured implements Tool {
             }
             return job;
         }
-        
+
         /**
          * Uses the HBase Front Door Api to write to index table. Submits the job and either returns or
          * waits for the job completion based on runForeground parameter.
@@ -589,6 +588,8 @@ public class IndexTool extends Configured implements Tool {
                 printHelpAndExit(e.getMessage(), getOptions());
             }
             final Configuration configuration = HBaseConfiguration.addHbaseResources(getConf());
+            configuration.setBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, true);
+            configuration.setBoolean(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, true);
             boolean useTenantId = cmdLine.hasOption(TENANT_ID_OPTION.getOpt());
             tenantId = null;
             if (useTenantId) {
@@ -597,10 +598,11 @@ public class IndexTool extends Configured implements Tool {
             }
 
             schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
-            dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
+            dataTable = "\"" + cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt()) + "\"";
             indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
             isPartialBuild = cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt());
             qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
+            String dataTableName = SchemaUtil.getTableName(schemaName, dataTable);
             try(Connection tempConn = ConnectionUtil.getInputConnection(configuration)) {
                 pDataTable = PhoenixRuntime.getTableNoCache(tempConn, qDataTable);
             }
@@ -614,18 +616,18 @@ public class IndexTool extends Configured implements Tool {
             pIndexTable = null;
 
             connection = ConnectionUtil.getInputConnection(configuration);
-            
+
             if (indexTable != null) {
-                if (!isValidIndexTable(connection, qDataTable,indexTable, tenantId)) {
+                if (!isValidIndexTable(connection, dataTableName, indexTable, tenantId)) {
                     throw new IllegalArgumentException(String.format(
-                        " %s is not an index table for %s for this connection", indexTable, qDataTable));
+                        " %s is not an index table for %s for this connection", indexTable, dataTableName));
                 }
                 pIndexTable = PhoenixRuntime.getTable(connection, schemaName != null && !schemaName.isEmpty()
-                        ? SchemaUtil.getQualifiedTableName(schemaName, indexTable) : indexTable);
+                        ? SchemaUtil.getQualifiedTableName(schemaName, indexTable) : SchemaUtil.normalizeIdentifier(indexTable));
                 if (schemaName != null && !schemaName.isEmpty()) {
                     qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
                 } else {
-                    qIndexTable = indexTable;
+                    qIndexTable = SchemaUtil.normalizeIdentifier(indexTable);
                 }
                 htable = connection.unwrap(PhoenixConnection.class).getQueryServices()
                         .getTable(pIndexTable.getPhysicalName().getBytes());
@@ -857,9 +859,10 @@ public class IndexTool extends Configured implements Tool {
     public static boolean isValidIndexTable(final Connection connection, final String masterTable,
             final String indexTable, final String tenantId) throws SQLException {
         final DatabaseMetaData dbMetaData = connection.getMetaData();
-        final String schemaName = SchemaUtil.getSchemaNameFromFullName(masterTable);
+        final String schemaName = SchemaUtil.normalizeIdentifier(SchemaUtil.getSchemaNameFromFullName(masterTable));
         final String tableName = SchemaUtil.normalizeIdentifier(SchemaUtil.getTableNameFromFullName(masterTable));
 
+        final String indexTableName = SchemaUtil.normalizeIdentifier(indexTable);
         ResultSet rs = null;
         try {
             String catalog = "";
@@ -869,7 +872,7 @@ public class IndexTool extends Configured implements Tool {
             rs = dbMetaData.getIndexInfo(catalog, schemaName, tableName, false, false);
             while (rs.next()) {
                 final String indexName = rs.getString(6);
-                if (indexTable.equalsIgnoreCase(indexName)) {
+                if (indexTableName.equals(indexName)) {
                     return true;
                 }
             }

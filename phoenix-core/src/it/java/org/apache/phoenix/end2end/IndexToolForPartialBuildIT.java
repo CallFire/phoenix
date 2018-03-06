@@ -70,7 +70,7 @@ import com.google.common.collect.Maps;
  * Tests for the {@link IndexToolForPartialBuildIT}
  */
 public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
-    
+
     protected boolean isNamespaceEnabled = false;
     protected final String tableDDLOptions;
     
@@ -104,7 +104,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
     public void testSecondaryIndex() throws Exception {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
-        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String fullTableName = "\""+schemaName+"\".\""+dataTableName+"\"";
         final String indxTable = String.format("%s_%s", dataTableName, FailingRegionObserver.INDEX_NAME);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
@@ -138,8 +138,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             } catch (SQLException e) {} catch (Exception e) {}
             conn.createStatement()
                     .execute(String.format("ALTER INDEX %s on %s REBUILD ASYNC", indxTable, fullTableName));
-            
-            FailingRegionObserver.FAIL_WRITE = false;
+FailingRegionObserver.FAIL_WRITE = false;
             ResultSet rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(schemaName), indxTable,
                     new String[] { PTableType.INDEX.toString() });
             assertTrue(rs.next());
@@ -150,7 +149,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             upsertRow(stmt1, 6000);
             upsertRow(stmt1, 7000);
             conn.commit();
-            
+
 			rs = conn.createStatement()
 					.executeQuery(String.format("SELECT " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + ","
 							+ PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " FROM "
@@ -259,9 +258,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
         stmt.setInt(3, 95050 + i);
         stmt.executeUpdate();
     }
-    
-
-    public static class FailingRegionObserver extends SimpleRegionObserver {
+public static class FailingRegionObserver extends SimpleRegionObserver {
         public static volatile boolean FAIL_WRITE = false;
         public static final String INDEX_NAME = "IDX";
         @Override
@@ -279,5 +276,5 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
         }
 
     }
-    
+
 }

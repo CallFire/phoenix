@@ -679,7 +679,10 @@ public class PTableImpl implements PTable {
             for (PTable index : this.indexes) {
                 estimatedSize += index.getEstimatedSize();
             }
-
+            if (parentTableName != null) {
+                String schema = parentSchemaName != null ? parentSchemaName.getString() : null;
+                this.parentName = SchemaUtil.getPhysicalHBaseTableName(schema, parentTableName.getString(), isNamespaceMapped);
+            }
             estimatedSize += PNameFactory.getEstimatedSize(this.parentName);
             for (PName physicalName : this.physicalNames) {
                 estimatedSize += physicalName.getEstimatedSize();
@@ -854,7 +857,7 @@ public class PTableImpl implements PTable {
     public long getUpdateCacheFrequency() {
         return updateCacheFrequency;
     }
-    
+
     @Override
     public boolean isMultiTenant() {
         return multiTenant;
@@ -1379,7 +1382,7 @@ public class PTableImpl implements PTable {
     public List<PColumn> getColumns() {
         return allColumns;
     }
-    
+
     @Override
     public List<PColumn> getExcludedColumns() {
         return excludedColumns;
