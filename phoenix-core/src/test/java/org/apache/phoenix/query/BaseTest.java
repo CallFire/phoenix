@@ -606,6 +606,8 @@ public abstract class BaseTest {
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
         conf.setInt("hbase.catalogjanitor.interval", 5000);
+        conf.setBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE);
+        conf.setBoolean(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, Boolean.TRUE);
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
         return conf;
@@ -720,7 +722,7 @@ public abstract class BaseTest {
             throw new IllegalStateException("Used up all unique names");
         }
         TABLE_COUNTER.incrementAndGet();
-        return "T" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
+        return "T" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1) + "lowercase";
     }
 
     private static AtomicInteger SEQ_NAME_SUFFIX = new AtomicInteger(0);
