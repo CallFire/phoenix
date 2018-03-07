@@ -80,6 +80,7 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -400,7 +401,7 @@ public class IndexTool extends Configured implements Tool {
             final List<String> indexColumns = ddlCompiler.getIndexColumnNames();
             final String selectQuery = ddlCompiler.getSelectQuery();
             final String upsertQuery =
-                    QueryUtil.constructUpsertStatement(indexTableName, indexColumns, Hint.NO_INDEX);
+                    QueryUtil.constructUpsertStatement(indexTableName.replace(':', '.'), indexColumns, Hint.NO_INDEX);
 
 
             configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
@@ -429,7 +430,7 @@ public class IndexTool extends Configured implements Tool {
                 try {
                     admin = pConnection.getQueryServices().getAdmin();
                     String pdataTableName = pdataTable.getName().getString();
-                    snapshotName = new StringBuilder(pdataTableName).append("-Snapshot").toString();
+                    snapshotName = new StringBuilder(qDataTable).append("-Snapshot").toString();
                     admin.snapshot(snapshotName, TableName.valueOf(pdataTableName));
                 } finally {
                     if (admin != null) {
@@ -519,6 +520,8 @@ public class IndexTool extends Configured implements Tool {
                 printHelpAndExit(e.getMessage(), getOptions());
             }
             final Configuration configuration = HBaseConfiguration.addHbaseResources(getConf());
+            configuration.setBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, true);
+            configuration.setBoolean(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, true);
             final String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
             final String dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
             final String indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
