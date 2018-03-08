@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.end2end;
 
+import java.util.Properties;
+
 import com.google.common.collect.Maps;
 import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.query.BaseTest;
@@ -57,8 +59,10 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        Properties properties = new Properties();
+        properties.setProperty(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, "true");
+        properties.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS.addAll(properties));
     }
 
     @AfterClass
