@@ -190,5 +190,29 @@
   </build>
 
   <dependencies>
+    <dependency>
+      <groupId>org.apache.calcite.avatica</groupId>
+      <artifactId>avatica-core</artifactId>
+    </dependency>
+    <dependency>
+      <!-- a dependency for the thin-client uberjar -->
+      <groupId>sqlline</groupId>
+      <artifactId>sqlline</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+    </dependency>
+    <!-- PHOENIX-4453 These libraries are needed by avatica but CDH parent is forcing an older version -->
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <version>4.5.2</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+      <version>4.4.4</version>
+    </dependency>
   </dependencies>
 </project>
