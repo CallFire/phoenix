@@ -143,6 +143,14 @@
                   <pattern>org.apache.http</pattern>
                   <shadedPattern>${shaded.package}.org.apache.http</shadedPattern>
                 </relocation>
+                <relocation>
+                  <pattern>javax.servlet</pattern>
+                  <shadedPattern>${shaded.package}.javax.servlet</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax.el</pattern>
+                  <shadedPattern>${shaded.package}.javax.el</shadedPattern>
+                </relocation>
 
                 <relocation>
                   <pattern>org.fusesource</pattern>
