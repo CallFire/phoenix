@@ -72,8 +72,8 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <finalName>phoenix-${project.version}-thin-client</finalName>
-
+			  <shadedArtifactAttached>true</shadedArtifactAttached>
+		      <shadedClassifierName>thin-client</shadedClassifierName>
               <transformers>
                 <transformer
                     implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
@@ -142,6 +142,14 @@
                 <relocation>
                   <pattern>org.apache.http</pattern>
                   <shadedPattern>${shaded.package}.org.apache.http</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax.servlet</pattern>
+                  <shadedPattern>${shaded.package}.javax.servlet</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax.el</pattern>
+                  <shadedPattern>${shaded.package}.javax.el</shadedPattern>
                 </relocation>
 
                 <relocation>

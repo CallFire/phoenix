@@ -73,14 +73,10 @@
         <artifactId>maven-install-plugin</artifactId>
         <executions>
           <execution>
-            <goals>
-              <goal>install-file</goal>
-            </goals>
             <id>default-install</id>
             <configuration>
               <skip>true</skip>
             </configuration>
-            <phase>install</phase>
           </execution>
         </executions>
         <configuration>
@@ -99,8 +95,9 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <finalName>phoenix-${project.version}-server</finalName>
-                <shadedArtifactAttached>false</shadedArtifactAttached>
+                <shadedArtifactAttached>true</shadedArtifactAttached>
+                <shadedClassifierName>shaded-server</shadedClassifierName>
+
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>
                 <transformers>
