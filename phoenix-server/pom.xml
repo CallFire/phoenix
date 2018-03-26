@@ -115,8 +115,9 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <finalName>phoenix-${project.version}-server</finalName>
-                <shadedArtifactAttached>false</shadedArtifactAttached>
+                <shadedArtifactAttached>true</shadedArtifactAttached>
+                <shadedClassifierName>shaded-server</shadedClassifierName>
+
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>
                 <transformers>
