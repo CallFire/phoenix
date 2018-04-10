@@ -117,7 +117,7 @@
     <tephra.version>0.15.0-incubating</tephra.version>
     <omid.version>1.0.0</omid.version>
     <spark.version>${cdh.spark.version}</spark.version>
-    <scala.version>2.11.8</scala.version>
+    <scala.version>2.11.12</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.4</i18n-util.version>
@@ -161,7 +161,7 @@
             <target>1.8</target>
           </configuration>
         </plugin>
-        <!--This plugin's configuration is used to store Eclipse m2e settings 
+        <!--This plugin's configuration is used to store Eclipse m2e settings
           only. It has no influence on the Maven build itself. -->
         <plugin>
           <groupId>org.eclipse.m2e</groupId>
