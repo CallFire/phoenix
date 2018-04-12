@@ -17,15 +17,19 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.expression.*;
-import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.expression.ColumnExpression;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.util.ByteUtil;
 
 /**
  * 
@@ -73,6 +77,10 @@ public class PercentileDiscClientAggregator extends DistinctValueWithCountClient
 				if (cum_dist >= p) {
 					break;
 				}
+			}
+			if (result == null) {
+				ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+				return true;
 			}
 			this.cachedResult = result;
 		}
