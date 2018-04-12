@@ -47,7 +47,7 @@ public class PercentileClientAggregator extends DistinctValueWithCountClientAggr
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (cachedResult == null) {
-            ColumnExpression columnExp = (ColumnExpression)exps.get(0);
+            BaseExpression columnExp = (BaseExpression)exps.get(0);
             // Second exp will be a LiteralExpression of Boolean type indicating whether the ordering to
             // be ASC/DESC
             LiteralExpression isAscendingExpression = (LiteralExpression)exps.get(1);
