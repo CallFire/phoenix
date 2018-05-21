@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -29,7 +30,10 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 
 /**
  * 
@@ -81,9 +85,8 @@ public class PercentileDiscClientAggregator extends DistinctValueWithCountClient
 
 			// result is null when we try to find percentile on an empty data set.
 			// if data set is not empty but has null values - percentile works fine
-			if (cachedResult == null) {
-				ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-				return true;
+			if (result == null) {
+				result = getDefaultResult();
 			}
 			this.cachedResult = result;
 		}
@@ -97,6 +100,18 @@ public class PercentileDiscClientAggregator extends DistinctValueWithCountClient
 		ptr.set(buffer);
 		return true;
 	}
+
+    private Object getDefaultResult() {
+        PDataType resultDataType = getResultDataType();
+        if (resultDataType == null) throw new IllegalArgumentException("PercentileDiscClientAggregator: result data type is null");
+
+        if (PInteger.class.equals(resultDataType.getClass())) return 0;
+        if (PLong.class.equals(resultDataType.getClass())) return 0L;
+        if (PDecimal.class.equals(resultDataType.getClass())) return BigDecimal.ZERO;
+        if (PFloat.class.equals(resultDataType.getClass())) return 0f;
+        if (PDouble.class.equals(resultDataType.getClass())) return 0d;
+        throw new IllegalArgumentException("can't get default value for type " + resultDataType.getClass().getSimpleName());
+    }
 
 	@Override
 	protected int getBufferLength() {
