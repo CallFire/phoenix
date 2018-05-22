@@ -17,14 +17,12 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.BaseExpression;
-import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.SortOrder;
@@ -84,7 +82,7 @@ public class PercentileDiscClientAggregator extends DistinctValueWithCountClient
 			// if data set is not empty but has null values - percentile works fine
 			if (result == null) {
 				ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-				return true;
+				return false;
 			}
 			this.cachedResult = result;
 		}
