@@ -24,16 +24,14 @@ import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.BaseExpression;
+import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PFloat;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.ByteUtil;
 
 /**
  * 
@@ -82,11 +80,11 @@ public class PercentileDiscClientAggregator extends DistinctValueWithCountClient
 					break;
 				}
 			}
-
 			// result is null when we try to find percentile on an empty data set.
 			// if data set is not empty but has null values - percentile works fine
 			if (result == null) {
-				result = getDefaultResult();
+				ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+				return true;
 			}
 			this.cachedResult = result;
 		}
@@ -100,18 +98,6 @@ public class PercentileDiscClientAggregator extends DistinctValueWithCountClient
 		ptr.set(buffer);
 		return true;
 	}
-
-    private Object getDefaultResult() {
-        PDataType resultDataType = getResultDataType();
-        if (resultDataType == null) throw new IllegalArgumentException("PercentileDiscClientAggregator: result data type is null");
-
-        if (PInteger.class.equals(resultDataType.getClass())) return 0;
-        if (PLong.class.equals(resultDataType.getClass())) return 0L;
-        if (PDecimal.class.equals(resultDataType.getClass())) return BigDecimal.ZERO;
-        if (PFloat.class.equals(resultDataType.getClass())) return 0f;
-        if (PDouble.class.equals(resultDataType.getClass())) return 0d;
-        throw new IllegalArgumentException("can't get default value for type " + resultDataType.getClass().getSimpleName());
-    }
 
 	@Override
 	protected int getBufferLength() {

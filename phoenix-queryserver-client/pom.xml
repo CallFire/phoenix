@@ -64,6 +64,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
+        <version>3.1.0</version>
         <executions>
           <execution>
             <id>thin-client</id>
@@ -72,8 +73,8 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <finalName>phoenix-${project.version}-thin-client</finalName>
-
+			  <shadedArtifactAttached>true</shadedArtifactAttached>
+		      <shadedClassifierName>thin-client</shadedClassifierName>
               <transformers>
                 <transformer
                     implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
@@ -109,7 +110,6 @@
               <relocations>
 
                 <!-- COM relocation -->
-
                 <relocation>
                   <pattern>com.fasterxml</pattern>
                   <shadedPattern>${shaded.package}.com.fasterxml</shadedPattern>
@@ -122,7 +122,7 @@
                   <pattern>com.google.protobuf</pattern>
                   <shadedPattern>${shaded.package}.com.google.protobuf</shadedPattern>
                 </relocation>
-                <!-- ORG relocation -->
+                <!--&lt;!&ndash; ORG relocation &ndash;&gt;-->
                 <relocation>
                   <pattern>org.apache.calcite.avatica</pattern>
                   <shadedPattern>${shaded.package}.org.apache.calcite.avatica</shadedPattern>
@@ -146,6 +146,14 @@
                 <relocation>
                   <pattern>org.apache.http</pattern>
                   <shadedPattern>${shaded.package}.org.apache.http</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax.servlet</pattern>
+                  <shadedPattern>${shaded.package}.javax.servlet</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax.el</pattern>
+                  <shadedPattern>${shaded.package}.javax.el</shadedPattern>
                 </relocation>
 
                 <relocation>
