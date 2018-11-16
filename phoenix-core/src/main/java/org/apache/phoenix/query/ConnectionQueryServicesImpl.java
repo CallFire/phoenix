@@ -4230,11 +4230,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return user;
     }
 
-    @Override
-    public User getUser() {
-        return user;
-    }
-
     private void checkClosed() {
         if (closed) {
             throwConnectionClosedException();
