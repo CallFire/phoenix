@@ -85,7 +85,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
 
     public TephraTransactionContext(PhoenixConnection connection) {
-        PhoenixTransactionClient client = connection.getQueryServices().initTransactionClient(getProvider());  
+        PhoenixTransactionClient client = connection.getQueryServices().initTransactionClient(getProvider());
         assert (client instanceof TephraTransactionClient);
         this.txServiceClient = ((TephraTransactionClient)client).getTransactionClient();
         this.txAwares = Collections.emptyList();
@@ -95,7 +95,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     private TephraTransactionContext(PhoenixTransactionContext ctx, boolean subTask) {
         assert (ctx instanceof TephraTransactionContext);
         TephraTransactionContext tephraTransactionContext = (TephraTransactionContext) ctx;
-        this.txServiceClient = tephraTransactionContext.txServiceClient;  
+        this.txServiceClient = tephraTransactionContext.txServiceClient;
 
         if (subTask) {
             this.tx = tephraTransactionContext.getTransaction();
@@ -111,7 +111,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     public TransactionFactory.Provider getProvider() {
         return TransactionFactory.Provider.TEPHRA;
     }
-    
+
     @Override
     public void begin() throws SQLException {
         if (txContext == null) {
@@ -232,7 +232,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         if (table.getType() == PTableType.INDEX) {
             return;
         }
-        
+
         byte[] logicalKey = table.getName().getBytes();
         TransactionAware logicalTxAware = VisibilityFence.create(logicalKey);
 
@@ -403,15 +403,15 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext context, boolean subTask) {
         return new TephraTransactionContext(context, subTask);
     }
-    
+
     public static class TransactionAwareHTableDelegate extends TransactionAwareHTable implements HTableInterface  {
         private final HTableInterface delegate;
-        
+
         public TransactionAwareHTableDelegate(HTableInterface hTable, TxConstants.ConflictDetection conflictLevel) {
             super(hTable, conflictLevel);
             delegate = hTable;
         }
-        
+
         @Override
         public long incrementColumnValue(byte[] row, byte[] family, byte[] qualifier, long amount, boolean writeToWAL)
                 throws IOException {
@@ -452,16 +452,6 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         public Result getRowOrBefore(byte[] row, byte[] family) throws IOException {
             return delegate.getRowOrBefore(row, family);
         }
-        
-        @Override
-        public void setRpcTimeout(int i) {
-            delegate.setRpcTimeout(i);
-        }
-
-        @Override
-        public int getRpcTimeout() {
-            return delegate.getRpcTimeout();
-        }
 
         @Override
         public void setOperationTimeout(int i) {
@@ -472,8 +462,38 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         public int getOperationTimeout() {
             return delegate.getOperationTimeout();
         }
+
+        @Override
+        public int getRpcTimeout() {
+            return delegate.getReadRpcTimeout();
+        }
+
+        @Override
+        public void setRpcTimeout(int i) {
+            delegate.setRpcTimeout(i);
+        }
+
+        @Override
+        public int getReadRpcTimeout() {
+            return delegate.getReadRpcTimeout();
+        }
+
+        @Override
+        public void setReadRpcTimeout(int i) {
+            delegate.setReadRpcTimeout(i);
+        }
+
+        @Override
+        public int getWriteRpcTimeout() {
+            return delegate.getWriteRpcTimeout();
+        }
+
+        @Override
+        public void setWriteRpcTimeout(int i) {
+            delegate.setWriteRpcTimeout(i);
+        }
     }
-    
+
     @Override
     public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) {
         TransactionAwareHTableDelegate transactionAwareHTable = new TransactionAwareHTableDelegate(htable, isImmutable ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
@@ -501,9 +521,9 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         }
         return transactionAwareHTable;
     }
-    
+
     /**
-     * 
+     *
      * Wraps Tephra data table HTables to catch when a rollback occurs so
      * that index Delete mutations can be generated and applied (as
      * opposed to storing them in the Tephra change set). This technique
@@ -570,5 +590,5 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
                 }
             }
         }
-    }    
+    }
 }

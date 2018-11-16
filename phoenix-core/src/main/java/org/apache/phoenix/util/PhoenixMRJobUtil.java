@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.hadoop.mapreduce.MRJobConfig.MAP_MEMORY_MB;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,7 +65,6 @@ public class PhoenixMRJobUtil {
     // Jobs
     public static final String QUEUE_NAME = "mapreduce.job.queuename";
     public static final String DEFAULT_QUEUE_NAME = "default";
-    public static final String MAP_MEMORY_MB = "mapreduce.map.memory.mb";
     public static final int DEFAULT_MR_CONCURRENT_MAP_LIMIT = 20;
     public static final int DEFAULT_MAP_MEMROY_MB = 5120;
     public static final String MAP_JAVA_OPTS = "mapreduce.map.java.opts";

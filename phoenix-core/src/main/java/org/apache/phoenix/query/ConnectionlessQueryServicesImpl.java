@@ -120,7 +120,6 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private final Configuration config;
 
     private User user;
-
     public ConnectionlessQueryServicesImpl(QueryServices services, ConnectionInfo connInfo, Properties info) {
         super(services);
         userName = connInfo.getPrincipal();
@@ -171,7 +170,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     protected String getLogTableDDL() {
         return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
     }
-    
+
     private String setSystemLogDDLProperties(String ddl) {
         return String.format(ddl, props.getInt(LOG_SALT_BUCKETS_ATTRIB, QueryServicesOptions.DEFAULT_LOG_SALT_BUCKETS));
 

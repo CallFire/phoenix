@@ -4224,6 +4224,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public String getUserName() {
         return userName;
     }
+    
+    @Override
+    public User getUser() {
+        return user;
+    }
 
     @Override
     public User getUser() {
