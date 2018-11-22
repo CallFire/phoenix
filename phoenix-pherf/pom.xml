@@ -15,7 +15,7 @@
 	<parent>
 		<groupId>org.apache.phoenix</groupId>
 		<artifactId>phoenix</artifactId>
-        <version>4.14.1-cdh5.14.2-cf</version>
+        <version>4.14.1-cdh5.14.2-cf.5</version>
 	</parent>
 
 	<artifactId>phoenix-pherf</artifactId>
@@ -169,18 +169,6 @@
 		<plugin>
 			<groupId>org.apache.maven.plugins</groupId>
 			<artifactId>maven-install-plugin</artifactId>
-			<executions>
-				<execution>
-					<goals>
-						<goal>install-file</goal>
-					</goals>
-					<id>default-install</id>
-					<configuration>
-						<skip>true</skip>
-					</configuration>
-					<phase>install</phase>
-				</execution>
-			</executions>
 			<configuration>
 				<file>${basedir}/target/phoenix-pherf-${project.version}-minimal.jar</file>
 			</configuration>

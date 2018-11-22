@@ -2578,7 +2578,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     // 2. SYSTEM.CATALOG exists and its timestamp < MIN_SYSTEM_TABLE_TIMESTAMP
                                     // 3. SYSTEM.CATALOG exists, but client and server-side namespace mapping is enabled so
                                     //    we need to migrate SYSTEM tables to the SYSTEM namespace
-                                    setUpgradeRequired();
+                                    if (e.getSystemCatalogTimeStamp() < MIN_SYSTEM_TABLE_TIMESTAMP || needToMigrateSystemTablesToNs()) {
+                                        setUpgradeRequired();
+                                    }
                                 }
 
                                 if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
@@ -3031,6 +3033,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sysCatalogTableName = SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getNameAsString();
                 if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, ConnectionQueryServicesImpl.this.getProps())) {
                     // Try acquiring a lock in SYSMUTEX table before migrating the tables since it involves disabling the table.
+                    // don't upgrade if we don't have tables and timestamp is already up to date
+                    if (!needToMigrateSystemTablesToNs() && e.getSystemCatalogTimeStamp() == MIN_SYSTEM_TABLE_TIMESTAMP) {
+                        return;
+                    }
                     if (acquiredMutexLock = acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP, mutexRowKey)) {
                         logger.debug("Acquired lock in SYSMUTEX table for migrating SYSTEM tables to SYSTEM namespace "
                           + "and/or upgrading " + sysCatalogTableName);
@@ -3371,6 +3377,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 }
             }
+        }
+    }
+
+    boolean needToMigrateSystemTablesToNs()
+            throws SQLException, IOException, IllegalArgumentException {
+        if (!SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.getProps())) { return false; }
+        try (HBaseAdmin admin = getAdmin()) {
+            return getSystemTableNamesInDefaultNamespace(admin).size() != 0;
         }
     }
 

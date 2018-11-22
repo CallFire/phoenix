@@ -27,7 +27,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.14.1-cdh5.14.2-cf</version>
+    <version>4.14.1-cdh5.14.2-cf.5</version>
   </parent>
   <artifactId>phoenix-client</artifactId>
   <name>Phoenix Client</name>
@@ -67,17 +67,9 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-install-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>default-install</id>
-            <configuration>
-              <skip>true</skip>
-            </configuration>
-          </execution>
-        </executions>
         <configuration>
           <file>${basedir}/target/phoenix-${project.version}-client.jar</file>
-	  <pomFile>${basedir}/pom.xml</pomFile>
+	      <pomFile>${basedir}/pom.xml</pomFile>
         </configuration>
       </plugin>
       <plugin>
