@@ -18,7 +18,6 @@
 package org.apache.phoenix.compile;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
-import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -168,7 +167,6 @@ public class TupleProjectionCompiler {
                 .setBaseColumnCount(BASE_TABLE_BASE_COLUMN_COUNT)
                 .setExcludedColumns(ImmutableList.of())
                 .setPhysicalNames(ImmutableList.of())
-                .setColumns(projectedColumns)
                 .build();
     }
     
@@ -203,7 +201,7 @@ public class TupleProjectionCompiler {
                 .setMultiTenant(table.isMultiTenant())
                 .setStoreNulls(table.getStoreNulls())
                 .setViewType(table.getViewType())
-                .setViewIndexType(table.getViewIndexType())
+                .setViewIndexIdType(table.getviewIndexIdType())
                 .setViewIndexId(table.getViewIndexId())
                 .setTransactionProvider(table.getTransactionProvider())
                 .setUpdateCacheFrequency(table.getUpdateCacheFrequency())

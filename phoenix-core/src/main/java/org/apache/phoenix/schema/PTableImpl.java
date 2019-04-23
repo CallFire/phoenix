@@ -17,15 +17,18 @@
  */
 package org.apache.phoenix.schema;
 
+import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.addQuietly;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -44,12 +47,15 @@ import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
@@ -101,6 +107,8 @@ import com.google.common.collect.Maps;
  */
 public class PTableImpl implements PTable {
     private static final Integer NO_SALTING = -1;
+    private static final int VIEW_MODIFIED_UPDATE_CACHE_FREQUENCY_BIT_SET_POS = 0;
+    private static final int VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS = 1;
 
     private IndexMaintainer indexMaintainer;
     private ImmutableBytesWritable indexMaintainersPtr;
@@ -143,7 +151,7 @@ public class PTableImpl implements PTable {
     private final boolean storeNulls;
     private final TransactionFactory.Provider transactionProvider;
     private final ViewType viewType;
-    private final PDataType viewIndexType;
+    private final PDataType viewIndexIdType;
     private final Long viewIndexId;
     private final int estimatedSize;
     private final IndexType indexType;
@@ -159,6 +167,7 @@ public class PTableImpl implements PTable {
     private final QualifierEncodingScheme qualifierEncodingScheme;
     private final EncodedCQCounter encodedCQCounter;
     private final Boolean useStatsForParallelization;
+    private final BitSet viewModifiedPropSet;
 
     public static class Builder {
         private PTableKey key;
@@ -197,7 +206,7 @@ public class PTableImpl implements PTable {
         private boolean storeNulls;
         private TransactionFactory.Provider transactionProvider;
         private ViewType viewType;
-        private PDataType viewIndexType;
+        private PDataType viewIndexIdType;
         private Long viewIndexId;
         private int estimatedSize;
         private IndexType indexType;
@@ -213,6 +222,8 @@ public class PTableImpl implements PTable {
         private QualifierEncodingScheme qualifierEncodingScheme;
         private EncodedCQCounter encodedCQCounter;
         private Boolean useStatsForParallelization;
+        // Used to denote which properties a view has explicitly modified
+        private BitSet viewModifiedPropSet = new BitSet(2);
         // Optionally set columns for the builder, but not for the actual PTable
         private Collection<PColumn> columns;
 
@@ -407,8 +418,8 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setViewIndexType(PDataType viewIndexType) {
-            this.viewIndexType = viewIndexType;
+        public Builder setViewIndexIdType(PDataType viewIndexIdType) {
+            this.viewIndexIdType = viewIndexIdType;
             return this;
         }
 
@@ -484,6 +495,18 @@ public class PTableImpl implements PTable {
 
         public Builder setUseStatsForParallelization(Boolean useStatsForParallelization) {
             this.useStatsForParallelization = useStatsForParallelization;
+            return this;
+        }
+
+        public Builder setViewModifiedUpdateCacheFrequency(boolean modified) {
+            this.viewModifiedPropSet.set(VIEW_MODIFIED_UPDATE_CACHE_FREQUENCY_BIT_SET_POS,
+                    modified);
+            return this;
+        }
+
+        public Builder setViewModifiedUseStatsForParallelization(boolean modified) {
+            this.viewModifiedPropSet.set(VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS,
+                    modified);
             return this;
         }
 
@@ -741,7 +764,7 @@ public class PTableImpl implements PTable {
         this.storeNulls = builder.storeNulls;
         this.transactionProvider = builder.transactionProvider;
         this.viewType = builder.viewType;
-        this.viewIndexType = builder.viewIndexType;
+        this.viewIndexIdType = builder.viewIndexIdType;
         this.viewIndexId = builder.viewIndexId;
         this.estimatedSize = builder.estimatedSize;
         this.indexType = builder.indexType;
@@ -757,6 +780,7 @@ public class PTableImpl implements PTable {
         this.qualifierEncodingScheme = builder.qualifierEncodingScheme;
         this.encodedCQCounter = builder.encodedCQCounter;
         this.useStatsForParallelization = builder.useStatsForParallelization;
+        this.viewModifiedPropSet = builder.viewModifiedPropSet;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -791,7 +815,7 @@ public class PTableImpl implements PTable {
                 .setMultiTenant(table.isMultiTenant())
                 .setStoreNulls(table.getStoreNulls())
                 .setViewType(table.getViewType())
-                .setViewIndexType(table.getViewIndexType())
+                .setViewIndexIdType(table.getviewIndexIdType())
                 .setViewIndexId(table.getViewIndexId())
                 .setIndexType(table.getIndexType())
                 .setTransactionProvider(table.getTransactionProvider())
@@ -820,7 +844,10 @@ public class PTableImpl implements PTable {
                 .setParentSchemaName(table.getParentSchemaName())
                 .setParentTableName(table.getParentTableName())
                 .setPhysicalNames(table.getPhysicalNames() == null ?
-                        ImmutableList.of() : ImmutableList.copyOf(table.getPhysicalNames()));
+                        ImmutableList.of() : ImmutableList.copyOf(table.getPhysicalNames()))
+                .setViewModifiedUseStatsForParallelization(table
+                        .hasViewModifiedUseStatsForParallelization())
+                .setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency());
     }
 
     @Override
@@ -1102,9 +1129,13 @@ public class PTableImpl implements PTable {
         private final long ts;
         private final boolean hasOnDupKey;
         // map from column name to value 
-        private Map<PColumn, byte[]> columnToValueMap; 
+        private Map<PColumn, byte[]> columnToValueMap;
+        // Map from the column family name to the list of dynamic columns in that column family.
+        // If there are no dynamic columns in a column family, the key for that column family
+        // will not exist in the map, rather than the corresponding value being an empty list.
+        private Map<String, List<PColumn>> colFamToDynamicColumnsMapping;
 
-        public PRowImpl(KeyValueBuilder kvBuilder, ImmutableBytesWritable key, long ts, Integer bucketNum, boolean hasOnDupKey) {
+        PRowImpl(KeyValueBuilder kvBuilder, ImmutableBytesWritable key, long ts, Integer bucketNum, boolean hasOnDupKey) {
             this.kvBuilder = kvBuilder;
             this.ts = ts;
             this.hasOnDupKey = hasOnDupKey;
@@ -1116,6 +1147,7 @@ public class PTableImpl implements PTable {
                 this.key = ByteUtil.copyKeyBytesIfNecessary(key);
             }
             this.columnToValueMap = Maps.newHashMapWithExpectedSize(1);
+            this.colFamToDynamicColumnsMapping = Maps.newHashMapWithExpectedSize(1);
             newMutations();
         }
 
@@ -1166,16 +1198,21 @@ public class PTableImpl implements PTable {
                         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                         singleCellConstructorExpression.evaluate(null, ptr);
                         ImmutableBytesPtr colFamilyPtr = new ImmutableBytesPtr(columnFamily);
-                        addQuietly(put, kvBuilder, kvBuilder.buildPut(keyPtr,
+                        addQuietly(put, kvBuilder.buildPut(keyPtr,
                             colFamilyPtr, QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES_PTR, ts, ptr));
                     }
+                    // Preserve the attributes of the original mutation
+                    Map<String, byte[]> attrsMap = setValues.getAttributesMap();
                     setValues = put;
+                    for (String attrKey : attrsMap.keySet()) {
+                        setValues.setAttribute(attrKey, attrsMap.get(attrKey));
+                    }
                 }
                 // Because we cannot enforce a not null constraint on a KV column (since we don't know if the row exists when
                 // we upsert it), so instead add a KV that is always empty. This allows us to imitate SQL semantics given the
                 // way HBase works.
                 Pair<byte[], byte[]> emptyKvInfo = EncodedColumnsUtil.getEmptyKeyValueInfo(PTableImpl.this);
-                addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr,
+                addQuietly(setValues, kvBuilder.buildPut(keyPtr,
                     SchemaUtil.getEmptyColumnFamilyPtr(PTableImpl.this),
                     new ImmutableBytesPtr(emptyKvInfo.getFirst()), ts,
                     new ImmutableBytesPtr(emptyKvInfo.getSecond())));
@@ -1248,11 +1285,52 @@ public class PTableImpl implements PTable {
                 }
                 else {
                     removeIfPresent(unsetValues, family, qualifier);
-                    addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr,
+                    addQuietly(setValues, kvBuilder.buildPut(keyPtr,
                         column.getFamilyName().getBytesPtr(), qualifierPtr,
                         ts, ptr));
                 }
+                String fam = Bytes.toString(family);
+                if (column.isDynamic()) {
+                    if (!this.colFamToDynamicColumnsMapping.containsKey(fam)) {
+                        this.colFamToDynamicColumnsMapping.put(fam, new ArrayList<>());
+                    }
+                    this.colFamToDynamicColumnsMapping.get(fam).add(column);
+                }
             }
+        }
+
+        /**
+         * Add attributes to the Put mutations indicating that we need to add shadow cells to Puts
+         * to store dynamic column metadata. See
+         * {@link org.apache.phoenix.coprocessor.ScanRegionObserver#preBatchMutate(ObserverContext,
+         * MiniBatchOperationInProgress)}
+         */
+        public boolean setAttributesForDynamicColumnsIfReqd() {
+            if (this.colFamToDynamicColumnsMapping == null ||
+                    this.colFamToDynamicColumnsMapping.isEmpty()) {
+                return false;
+            }
+            boolean attrsForDynColsSet = false;
+            for (Entry<String, List<PColumn>> colFamToDynColsList :
+                    this.colFamToDynamicColumnsMapping.entrySet()) {
+                DynamicColumnMetaDataProtos.DynamicColumnMetaData.Builder builder =
+                        DynamicColumnMetaDataProtos.DynamicColumnMetaData.newBuilder();
+                for (PColumn dynCol : colFamToDynColsList.getValue()) {
+                    builder.addDynamicColumns(PColumnImpl.toProto(dynCol));
+                }
+                if (builder.getDynamicColumnsCount() != 0) {
+                    // The attribute key is the column family name and the value is the
+                    // serialized list of dynamic columns
+                    setValues.setAttribute(colFamToDynColsList.getKey(),
+                            builder.build().toByteArray());
+                    attrsForDynColsSet = true;
+                }
+            }
+            return attrsForDynColsSet;
+        }
+
+        @Override public void setAttributeToProcessDynamicColumnsMetadata() {
+            setValues.setAttribute(DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION, TRUE_BYTES);
         }
 
         @Override
@@ -1440,8 +1518,8 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public PDataType getViewIndexType() {
-        return viewIndexType;
+    public PDataType getviewIndexIdType() {
+        return viewIndexIdType;
     }
 
     @Override
@@ -1476,8 +1554,8 @@ public class PTableImpl implements PTable {
         if (table.hasViewIndexId()) {
             viewIndexId = table.getViewIndexId();
         }
-        PDataType viewIndexType = table.hasViewIndexType()
-                ? PDataType.fromTypeId(table.getViewIndexType())
+        PDataType viewIndexIdType = table.hasViewIndexIdType()
+                ? PDataType.fromTypeId(table.getViewIndexIdType())
                 : MetaDataUtil.getLegacyViewIndexIdDataType();
         IndexType indexType = IndexType.getDefault();
         if(table.hasIndexType()){
@@ -1600,7 +1678,7 @@ public class PTableImpl implements PTable {
                     .setMultiTenant(multiTenant)
                     .setStoreNulls(storeNulls)
                     .setViewType(viewType)
-                    .setViewIndexType(viewIndexType)
+                    .setViewIndexIdType(viewIndexIdType)
                     .setViewIndexId(viewIndexId)
                     .setIndexType(indexType)
                     .setTransactionProvider(transactionProvider)
@@ -1651,7 +1729,7 @@ public class PTableImpl implements PTable {
         }
         if(table.getViewIndexId() != null) {
           builder.setViewIndexId(table.getViewIndexId());
-          builder.setViewIndexType(table.getViewIndexType().getSqlType());
+          builder.setViewIndexIdType(table.getviewIndexIdType().getSqlType());
 		}
         if(table.getIndexType() != null) {
             builder.setIndexType(ByteStringer.wrap(new byte[]{table.getIndexType().getSerializedValue()}));
@@ -1829,6 +1907,14 @@ public class PTableImpl implements PTable {
     @Override
     public Boolean useStatsForParallelization() {
         return useStatsForParallelization;
+    }
+
+    @Override public boolean hasViewModifiedUpdateCacheFrequency() {
+        return viewModifiedPropSet.get(VIEW_MODIFIED_UPDATE_CACHE_FREQUENCY_BIT_SET_POS);
+    }
+
+    @Override public boolean hasViewModifiedUseStatsForParallelization() {
+        return viewModifiedPropSet.get(VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS);
     }
 
     private static final class KVColumnFamilyQualifier {

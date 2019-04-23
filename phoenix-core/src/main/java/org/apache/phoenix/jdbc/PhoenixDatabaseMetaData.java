@@ -219,6 +219,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] TASK_TYPE_BYTES = Bytes.toBytes(TASK_TYPE);
     public static final String TASK_TS = "TASK_TS";
     public static final byte[] TASK_TS_BYTES = Bytes.toBytes(TASK_TS);
+    public static final String TASK_STATUS = "TASK_STATUS";
+    public static final String TASK_END_TS = "TASK_END_TS";
+    public static final String TASK_PRIORITY = "TASK_PRIORITY";
+    public static final String TASK_DATA = "TASK_DATA";
+    public static final String TASK_TABLE_TTL = "864000";
     public static final String ARRAY_SIZE = "ARRAY_SIZE";
     public static final byte[] ARRAY_SIZE_BYTES = Bytes.toBytes(ARRAY_SIZE);
     public static final String VIEW_CONSTANT = "VIEW_CONSTANT";
@@ -736,25 +741,26 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     @Override
     public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern)
             throws SQLException {
+        try {
         boolean isTenantSpecificConnection = connection.getTenantId() != null;
         List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
+        // Allow a "." in columnNamePattern for column family match
+        String colPattern = null;
+        String cfPattern = null;
+        if (columnNamePattern != null && columnNamePattern.length() > 0) {
+            int index = columnNamePattern.indexOf('.');
+            if (index <= 0) {
+                colPattern = columnNamePattern;
+            } else {
+                cfPattern = columnNamePattern.substring(0, index);
+                if (columnNamePattern.length() > index+1) {
+                    colPattern = columnNamePattern.substring(index+1);
+                }
+            }
+        }
         ResultSet rs = getTables(catalog, schemaPattern, tableNamePattern, null);
         while (rs.next()) {
             String schemaName = rs.getString(TABLE_SCHEM);
-            // Allow a "." in columnNamePattern for column family match
-            String colPattern = null;
-            String cfPattern = null;
-            if (columnNamePattern != null && columnNamePattern.length() > 0) {
-                int index = columnNamePattern.indexOf('.');
-                if (index <= 0) {
-                    colPattern = columnNamePattern;
-                } else {
-                    cfPattern = columnNamePattern.substring(0, index);
-                    if (columnNamePattern.length() > index+1) {
-                        colPattern = columnNamePattern.substring(index+1);
-                    }
-                }
-            }
             String tableName = rs.getString(TABLE_NAME);
             String tenantId = rs.getString(TABLE_CAT);
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
@@ -912,6 +918,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         }
 
         return new PhoenixResultSet(new MaterializedResultIterator(tuples), GET_COLUMNS_ROW_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));
+        } finally {
+            if (connection.getAutoCommit()) {
+                connection.commit();
+            }
+        }
     }
 
     @Override
@@ -1161,24 +1172,25 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         if (tableName == null || tableName.length() == 0) {
             return emptyResultSet;
         }
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
+        boolean isSalted = table.getBucketNum() != null;
+        boolean tenantColSkipped = false;
+        List<PColumn> pkColumns = table.getPKColumns();
+        List<PColumn> sorderPkColumns =
+                Lists.newArrayList(pkColumns.subList(isSalted ? 1 : 0, pkColumns.size()));
+        // sort the columns by name
+        Collections.sort(sorderPkColumns, new Comparator<PColumn>(){
+            @Override public int compare(PColumn c1, PColumn c2) {
+                return c1.getName().getString().compareTo(c2.getName().getString());
+            }
+        });
+
+        try {
         List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
         ResultSet rs = getTables(catalog, schemaName, tableName, null);
         while (rs.next()) {
             String tenantId = rs.getString(TABLE_CAT);
-            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-            PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
-            boolean isSalted = table.getBucketNum() != null;
-            boolean tenantColSkipped = false;
-            List<PColumn> pkColumns = table.getPKColumns();
-            List<PColumn> sorderPkColumns =
-                    Lists.newArrayList(pkColumns.subList(isSalted ? 1 : 0, pkColumns.size()));
-            // sort the columns by name
-            Collections.sort(sorderPkColumns, new Comparator<PColumn>(){
-                @Override public int compare(PColumn c1, PColumn c2) {
-                    return c1.getName().getString().compareTo(c2.getName().getString());
-                }
-            });
-            
             for (PColumn column : sorderPkColumns) {
                 String columnName = column.getName().getString();
                 // generate row key
@@ -1238,6 +1250,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         return new PhoenixResultSet(new MaterializedResultIterator(tuples),
                 GET_PRIMARY_KEYS_ROW_PROJECTOR,
                 new StatementContext(new PhoenixStatement(connection), false));
+        } finally {
+            if (connection.getAutoCommit()) {
+                connection.commit();
+            }
+        }
     }
 
     @Override

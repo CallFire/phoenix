@@ -358,11 +358,8 @@ public class JoinCompiler {
             }
         }
 
-        public Expression compilePostFilterExpression(StatementContext context, Table table) throws SQLException {
+        public Expression compilePostFilterExpression(StatementContext context) throws SQLException {
             List<ParseNode> filtersCombined = Lists.<ParseNode> newArrayList(postFilters);
-            if (table != null) {
-                filtersCombined.addAll(table.getPostFilters());
-            }
             return JoinCompiler.compilePostFilterExpression(context, filtersCombined);
         }
 
@@ -755,18 +752,16 @@ public class JoinCompiler {
             return combine(preFilters);
         }
 
-        public Expression compilePostFilterExpression(StatementContext context) throws SQLException {
-            return JoinCompiler.compilePostFilterExpression(context, postFilters);
-        }
-
         public SelectStatement getAsSubquery(List<OrderByNode> orderBy) throws SQLException {
-            if (isSubselect())
-                return SubselectRewriter.applyOrderBy(
-                        SubselectRewriter.applyPostFilters(subselect, preFilters, tableNode.getAlias()),
+            if (isSubselect()) {
+                return SubselectRewriter.applyOrderByAndPostFilters(
+                        SubselectRewriter.applyPreFiltersForSubselect(subselect, preFilters, tableNode.getAlias()),
                         orderBy,
                         tableNode.getAlias(),
-                        tableNode);
-
+                        postFilters);
+            }
+            //for table, postFilters is empty , because it can safely pushed down as preFilters.
+            assert postFilters == null || postFilters.isEmpty();
             return NODE_FACTORY.select(tableNode, select.getHint(), false, getSelectNodes(), getPreFiltersCombined(), null,
                     null, orderBy, null, null, 0, false, select.hasSequence(),
                     Collections.<SelectStatement> emptyList(), select.getUdfParseNodes());
@@ -1282,7 +1277,7 @@ public class JoinCompiler {
                 .setMultiTenant(left.isMultiTenant())
                 .setStoreNulls(left.getStoreNulls())
                 .setViewType(left.getViewType())
-                .setViewIndexType(left.getViewIndexType())
+                .setViewIndexIdType(left.getviewIndexIdType())
                 .setViewIndexId(left.getViewIndexId())
                 .setIndexType(left.getIndexType())
                 .setTransactionProvider(left.getTransactionProvider())

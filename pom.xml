@@ -24,19 +24,11 @@
 
   <modules>
     <module>phoenix-core</module>
-    <module>phoenix-flume</module>
-    <module>phoenix-kafka</module>
-    <module>phoenix-pig</module>
-    <module>phoenix-queryserver-client</module>
-    <module>phoenix-queryserver</module>
     <module>phoenix-pherf</module>
-    <module>phoenix-spark</module>
-    <module>phoenix-hive</module>
     <module>phoenix-client</module>
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
-    <module>phoenix-load-balancer</module>
   </modules>
 
   <repositories>
@@ -83,7 +75,7 @@
     <commons-lang.version>3.8</commons-lang.version>
     <commons-logging.version>1.2</commons-logging.version>
     <commons-csv.version>1.0</commons-csv.version>
-    <sqlline.version>1.2.0</sqlline.version>
+    <sqlline.version>1.7.0</sqlline.version>
     <guava.version>13.0.1</guava.version>
     <flume.version>1.4.0</flume.version>
     <kafka.version>0.9.0.0</kafka.version>
@@ -100,7 +92,8 @@
     <avatica.version>1.12.0</avatica.version>
     <jetty.version>9.3.19.v20170502</jetty.version>
     <tephra.version>0.15.0-incubating</tephra.version>
-    <spark.version>2.3.0</spark.version>
+    <omid.version>1.0.0</omid.version>
+    <spark.version>2.4.0</spark.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <stream.version>2.9.5</stream.version>
@@ -122,7 +115,7 @@
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
-    <numForkedIT>4</numForkedIT>
+    <numForkedIT>7</numForkedIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
 
@@ -460,16 +453,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-site-plugin</artifactId>
-        <version>3.2</version>
-        <configuration>
-          <reportPlugins>
-            <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>findbugs-maven-plugin</artifactId>
-              <version>2.5.2</version>
-            </plugin>
-          </reportPlugins>
-        </configuration>
+        <version>3.7.1</version>
       </plugin>
       <plugin>
         <groupId>org.apache.rat</groupId>
@@ -561,11 +545,6 @@
         <artifactId>phoenix-queryserver-client</artifactId>
         <version>${project.version}</version>
       </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-load-balancer</artifactId>
-        <version>${project.version}</version>
-      </dependency>
 
       <!-- HBase dependencies -->
       <dependency>
@@ -611,6 +590,16 @@
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-common</artifactId>
+        <version>${hbase.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-metrics-api</artifactId>
+        <version>${hbase.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-metrics</artifactId>
         <version>${hbase.version}</version>
       </dependency>
       <dependency>
@@ -822,6 +811,52 @@
         <artifactId>tephra-hbase-compat-2.0</artifactId>
         <version>${tephra.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-hbase-client-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-hbase-coprocessor-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-tso-server-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+          <groupId>org.testng</groupId>
+          <artifactId>testng</artifactId>
+        </exclusion>
+      </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-tso-server-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <type>test-jar</type>
+        <exclusions>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
 
       <!-- Make sure we have all the antlr dependencies -->
       <dependency>
@@ -1068,4 +1103,19 @@
       </properties>
     </profile>
   </profiles>
+
+  <reporting>
+      <plugins>
+          <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-project-info-reports-plugin</artifactId>
+              <version>3.0.0</version>
+          </plugin>
+          <plugin>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>findbugs-maven-plugin</artifactId>
+              <version>3.0.5</version>
+          </plugin>
+      </plugins>
+  </reporting>
 </project>

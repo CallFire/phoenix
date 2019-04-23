@@ -318,7 +318,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     
     private byte[] viewIndexId;
-    private PDataType viewIndexType;
+    private PDataType viewIndexIdType;
     private boolean isMultiTenant;
     // indexed expressions that are not present in the row key of the data table, the expression can also refer to a regular column
     private List<Expression> indexedExpressions;
@@ -376,8 +376,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
         this.rowKeyOrderOptimizable = index.rowKeyOrderOptimizable();
         this.isMultiTenant = dataTable.isMultiTenant();
-        this.viewIndexId = index.getViewIndexId() == null ? null : index.getViewIndexType().toBytes(index.getViewIndexId());
-        this.viewIndexType = index.getViewIndexType();
+        this.viewIndexId = index.getViewIndexId() == null ? null : index.getviewIndexIdType().toBytes(index.getViewIndexId());
+        this.viewIndexIdType = index.getviewIndexIdType();
         this.isLocalIndex = index.getIndexType() == IndexType.LOCAL;
         this.encodingScheme = index.getEncodingScheme();
         
@@ -829,7 +829,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
                 @Override
                 public PDataType getDataType() {
-                    return viewIndexType;
+                    return viewIndexIdType;
                 }
 
                 @Override
@@ -964,8 +964,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // add the keyvalue for the empty row
             put.add(kvBuilder.buildPut(new ImmutableBytesPtr(indexRowKey),
                 this.getEmptyKeyValueFamily(), dataEmptyKeyValueRef.getQualifierWritable(), ts,
-                // set the value to the empty column name
-                dataEmptyKeyValueRef.getQualifierWritable()));
+                    QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
             put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
         ImmutableBytesPtr rowKey = new ImmutableBytesPtr(indexRowKey);
@@ -1231,7 +1230,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // Fixed length
             //Use legacy viewIndexIdType for clients older than 4.10 release
             viewIndexId = new byte[MetaDataUtil.getLegacyViewIndexIdDataType().getByteSize()];
-            viewIndexType = MetaDataUtil.getLegacyViewIndexIdDataType();
+            viewIndexIdType = MetaDataUtil.getLegacyViewIndexIdDataType();
             input.readFully(viewIndexId);
         }
         int nIndexedColumns = Math.abs(encodedIndexedColumnsAndViewId) - 1;
@@ -1348,8 +1347,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         maintainer.nIndexSaltBuckets = proto.getSaltBuckets();
         maintainer.isMultiTenant = proto.getIsMultiTenant();
         maintainer.viewIndexId = proto.hasViewIndexId() ? proto.getViewIndexId().toByteArray() : null;
-        maintainer.viewIndexType = proto.hasViewIndexType()
-                ? PDataType.fromTypeId(proto.getViewIndexType())
+        maintainer.viewIndexIdType = proto.hasViewIndexIdType()
+                ? PDataType.fromTypeId(proto.getViewIndexIdType())
                 : MetaDataUtil.getLegacyViewIndexIdDataType();
         List<ServerCachingProtos.ColumnReference> indexedColumnsList = proto.getIndexedColumnsList();
         maintainer.indexedColumns = new HashSet<ColumnReference>(indexedColumnsList.size());
@@ -1470,7 +1469,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         builder.setIsMultiTenant(maintainer.isMultiTenant);
         if (maintainer.viewIndexId != null) {
             builder.setViewIndexId(ByteStringer.wrap(maintainer.viewIndexId));
-            builder.setViewIndexType(maintainer.viewIndexType.getSqlType());
+            builder.setViewIndexIdType(maintainer.viewIndexIdType.getSqlType());
         }
         for (ColumnReference colRef : maintainer.indexedColumns) {
             ServerCachingProtos.ColumnReference.Builder cRefBuilder =  ServerCachingProtos.ColumnReference.newBuilder();

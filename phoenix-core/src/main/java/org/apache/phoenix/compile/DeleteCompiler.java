@@ -156,7 +156,7 @@ public class DeleteCompiler {
         int offset = (table.getBucketNum() == null ? 0 : 1);
         byte[][] values = new byte[pkColumns.size()][];
         if (isSharedViewIndex) {
-            values[offset++] = table.getViewIndexType().toBytes(table.getViewIndexId());
+            values[offset++] = table.getviewIndexIdType().toBytes(table.getViewIndexId());
         }
         if (isMultiTenant) {
             values[offset++] = tenantIdBytes;
@@ -437,6 +437,9 @@ public class DeleteCompiler {
         final boolean hasPostProcessing = delete.getLimit() != null;
         final ConnectionQueryServices services = connection.getQueryServices();
         List<QueryPlan> queryPlans;
+        boolean allowServerMutations =
+                services.getProps().getBoolean(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+                        QueryServicesOptions.DEFAULT_ENABLE_SERVER_SIDE_DELETE_MUTATIONS);
         NamedTableNode tableNode = delete.getTable();
         String tableName = tableNode.getName().getTableName();
         String schemaName = tableNode.getName().getSchemaName();
@@ -550,7 +553,8 @@ public class DeleteCompiler {
         }
         
         runOnServer &= queryPlans.get(0).getTableRef().getTable().getType() != PTableType.INDEX;
-        
+        runOnServer &= allowServerMutations;
+
         // We need to have all indexed columns available in all immutable indexes in order
         // to generate the delete markers from the query. We also cannot have any filters
         // except for our SkipScanFilter for point lookups.

@@ -22,7 +22,6 @@ import static org.apache.phoenix.query.QueryServicesOptions.withDefaults;
 
 import org.apache.curator.shaded.com.google.common.io.Files;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
-import org.apache.phoenix.transaction.OmidTransactionProvider;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -100,7 +99,8 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setThreadPoolSize(DEFAULT_THREAD_POOL_SIZE)
                 .setMaxMemoryPerc(DEFAULT_MAX_MEMORY_PERC)
                 .setThreadTimeoutMs(DEFAULT_THREAD_TIMEOUT_MS)
-                .setSpoolThresholdBytes(DEFAULT_SPOOL_THRESHOLD_BYTES)
+                .setClientSpoolThresholdBytes(DEFAULT_SPOOL_THRESHOLD_BYTES)
+                .setServerSpoolThresholdBytes(DEFAULT_SPOOL_THRESHOLD_BYTES)
                 .setSpoolDirectory(DEFAULT_SPOOL_DIRECTORY)
                 .setMaxTenantMemoryPerc(DEFAULT_MAX_TENANT_MEMORY_PERC)
                 .setMaxServerCacheSize(DEFAULT_MAX_HASH_CACHE_SIZE)
@@ -129,13 +129,10 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .set(TxConstants.Manager.CFG_DO_PERSIST, false)
                 .set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times")
                 .set(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1)
-                .set(TxConstants.Service.CFG_DATA_TX_BIND_PORT, TestUtil.getRandomPort())
                 .set(TxConstants.Service.CFG_DATA_TX_CLIENT_DISCOVERY_TIMEOUT_SEC, 60)
                 .set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, Files.createTempDir().getAbsolutePath())
                 .set(TxConstants.Manager.CFG_TX_TIMEOUT, DEFAULT_TXN_TIMEOUT_SECONDS)
                 .set(TxConstants.Manager.CFG_TX_SNAPSHOT_INTERVAL, 5L)
-                // setup default test configs for Omid
-                .set(OmidTransactionProvider.OMID_TSO_PORT, TestUtil.getRandomPort())
                 ;
     }
     
