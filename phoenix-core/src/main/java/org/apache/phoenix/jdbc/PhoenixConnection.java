@@ -246,8 +246,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
 
         // Filter user provided properties based on property policy, if
-        // provided.
-        PropertyPolicyProvider.getPropertyPolicy().evaluate(info);
+        // provided and QueryServices.PROPERTY_POLICY_PROVIDER_ENABLED is true
+        if (Boolean.valueOf(info.getProperty(QueryServices.PROPERTY_POLICY_PROVIDER_ENABLED,
+                String.valueOf(QueryServicesOptions.DEFAULT_PROPERTY_POLICY_PROVIDER_ENABLED)))) {
+            PropertyPolicyProvider.getPropertyPolicy().evaluate(info);
+        }
 
         // Copy so client cannot change
         this.info = info == null ? new Properties() : PropertiesUtil
@@ -329,9 +332,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         int maxSizeBytes = this.services.getProps().getInt(
                 QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
-        Format dateFormat = DateUtil.getDateFormatter(datePattern);
-        Format timeFormat = DateUtil.getDateFormatter(timePattern);
-        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern);
+        String timeZoneID = this.services.getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+                DateUtil.DEFAULT_TIME_ZONE_ID);
+        Format dateFormat = DateUtil.getDateFormatter(datePattern, timeZoneID);
+        Format timeFormat = DateUtil.getDateFormatter(timePattern, timeZoneID);
+        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern, timeZoneID);
         formatters.put(PDate.INSTANCE, dateFormat);
         formatters.put(PTime.INSTANCE, timeFormat);
         formatters.put(PTimestamp.INSTANCE, timestampFormat);

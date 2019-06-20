@@ -27,7 +27,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.14.1-cdh5.14.2-cf.5</version>
+    <version>4.14.2-cdh5.14.4-cf</version>
   </parent>
   <artifactId>phoenix-server</artifactId>
   <name>Phoenix Server</name>
@@ -61,12 +61,9 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>default-jar</id>
-            <phase>none</phase>
-          </execution>
-        </executions>
+        <configuration>
+          <finalName>phoenix-${project.version}-server</finalName>
+        </configuration>
       </plugin>
 
       <plugin>
@@ -129,6 +126,7 @@
                   <include>com.ibm.icu:icu4j</include>
                   <include>com.ibm.icu:icu4j-charset</include>
                   <include>com.ibm.icu:icu4j-localespi</include>
+                  <include>com.lmax:disruptor</include>
                 </includes>
                   <excludes>
                     <exclude>org.apache.phoenix:phoenix-server</exclude>

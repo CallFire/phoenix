@@ -98,6 +98,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy.MutateCommand;
+import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
@@ -245,6 +246,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 public void doMutation() throws IOException {
                     commitBatch(region, localRegionMutations, blockingMemstoreSize);
                 }
+
+                @Override
+                public List<Mutation> getMutationList() {
+                    return localRegionMutations;
+                }
             });
         }
     }
@@ -254,12 +260,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
           return;
       }
 
-        Mutation[] mutationArray = new Mutation[mutations.size()];
+       Mutation[] mutationArray = new Mutation[mutations.size()];
       // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
       // flush happen which decrease the memstore size and then writes allowed on the region.
       for (int i = 0; blockingMemstoreSize > 0 && region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
           try {
-              checkForRegionClosing();
+              checkForRegionClosingOrSplitting();
               Thread.sleep(100);
           } catch (InterruptedException e) {
               Thread.currentThread().interrupt();
@@ -308,7 +314,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
      * a high chance that flush might not proceed and memstore won't be freed up.
      * @throws IOException
      */
-    private void checkForRegionClosing() throws IOException {
+    private void checkForRegionClosingOrSplitting() throws IOException {
         synchronized (lock) {
             if(isRegionClosingOrSplitting) {
                 lock.notifyAll();
@@ -365,6 +371,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             super.clear();
         }
     }
+
+   private long getBlockingMemstoreSize(Region region, Configuration conf) {
+       long flushSize = region.getTableDesc().getMemStoreFlushSize();
+
+       if (flushSize <= 0) {
+           flushSize = conf.getLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,
+                   HTableDescriptor.DEFAULT_MEMSTORE_FLUSH_SIZE);
+       }
+       return flushSize * (conf.getLong(HConstants.HREGION_MEMSTORE_BLOCK_MULTIPLIER,
+                   HConstants.DEFAULT_HREGION_MEMSTORE_BLOCK_MULTIPLIER)-1);
+   }
     
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException, SQLException {
@@ -481,12 +498,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         MutationList mutations = new MutationList();
         boolean needToWrite = false;
         Configuration conf = env.getConfiguration();
-        long flushSize = region.getTableDesc().getMemStoreFlushSize();
-
-        if (flushSize <= 0) {
-            flushSize = conf.getLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,
-                    HTableDescriptor.DEFAULT_MEMSTORE_FLUSH_SIZE);
-        }
 
         /**
          * Slow down the writes if the memstore size more than
@@ -494,9 +505,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
          * bytes. This avoids flush storm to hdfs for cases like index building where reads and
          * write happen to all the table regions in the server.
          */
-        final long blockingMemStoreSize = flushSize * (
-                conf.getLong(HConstants.HREGION_MEMSTORE_BLOCK_MULTIPLIER,
-                        HConstants.DEFAULT_HREGION_MEMSTORE_BLOCK_MULTIPLIER)-1) ;
+        final long blockingMemStoreSize = getBlockingMemstoreSize(region, conf) ;
 
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
         if(buildLocalIndex) {
@@ -808,7 +817,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             try {
                 if (targetHTable != null) {
-                    targetHTable.close();
+                    try {
+                        targetHTable.close();
+                    } catch (IOException e) {
+                        logger.error("Closing table: " + targetHTable + " failed: ", e);
+                    }
                 }
             } finally {
                 try {
@@ -904,6 +917,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 public void doMutation() throws IOException {
                     commitBatchWithHTable(targetHTable, remoteRegionMutations);
                 }
+
+                @Override
+                public List<Mutation> getMutationList() {
+                    return remoteRegionMutations;
+                }
             });
         }
         localRegionMutations.clear();
@@ -918,7 +936,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             // For an index write failure, the data table write succeeded,
             // so when we retry we need to set REPLAY_WRITES
             for (Mutation mutation : localRegionMutations) {
-                mutation.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
+                if (PhoenixIndexMetaData.isIndexRebuild(mutation.getAttributesMap())) {
+                    mutation.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                        BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
+                } else {
+                    mutation.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                        BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES);
+                }
                 // use the server timestamp for index write retrys
                 KeyValueUtil.setTimestamp(mutation, serverTimestamp);
             }
@@ -1026,6 +1050,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             int maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
             long maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
+            final long blockingMemstoreSize = getBlockingMemstoreSize(region, config);
             MutationList mutations = new MutationList(maxBatchSize);
             region.startRegionOperation();
             byte[] uuidValue = ServerCacheClient.generateId();
@@ -1043,7 +1068,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     put = new Put(CellUtil.cloneRow(cell));
                                     put.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                    put.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
+                                    put.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                                        BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
                                     put.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
                                     mutations.add(put);
                                     // Since we're replaying existing mutations, it makes no sense to write them to the wal
@@ -1055,7 +1081,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     del = new Delete(CellUtil.cloneRow(cell));
                                     del.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     del.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                    del.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
+                                    del.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                                        BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
                                     del.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
                                     mutations.add(del);
                                     // Since we're replaying existing mutations, it makes no sense to write them to the wal
@@ -1065,7 +1092,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             }
                         }
                         if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                            commitBatchWithRetries(region, mutations, -1);
+                            checkForRegionClosingOrSplitting();
+                            commitBatchWithRetries(region, mutations, blockingMemstoreSize);
                             uuidValue = ServerCacheClient.generateId();
                             mutations.clear();
                         }
@@ -1074,7 +1102,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     
                 } while (hasMore);
                 if (!mutations.isEmpty()) {
-                    commitBatchWithRetries(region, mutations, -1);
+                    checkForRegionClosingOrSplitting();
+                    commitBatchWithRetries(region, mutations, blockingMemstoreSize);
                 }
             }
         } catch (IOException e) {
@@ -1129,7 +1158,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         long rowCount = 0; // in case of async, we report 0 as number of rows updated
         StatisticsCollectionRunTracker statsRunTracker =
                 StatisticsCollectionRunTracker.getInstance(config);
-        boolean runUpdateStats = statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo(),scan.getFamilyMap().keySet());
+        final boolean runUpdateStats = statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo(),scan.getFamilyMap().keySet());
         if (runUpdateStats) {
             if (!async) {
                 rowCount = callable.call();
@@ -1158,8 +1187,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
             @Override
             public void close() throws IOException {
-                // No-op because we want to manage closing of the inner scanner ourselves.
-                // This happens inside StatsCollectionCallable.
+                // If we ran/scheduled StatsCollectionCallable the delegate
+                // scanner is closed there. Otherwise close it here.
+                if (!runUpdateStats) {
+                    super.close();
+                }
             }
 
             @Override
@@ -1316,13 +1348,31 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @Override
     public void preSplit(ObserverContext<RegionCoprocessorEnvironment> c, byte[] splitRow)
             throws IOException {
-        // Don't allow splitting if operations need read and write to same region are going on in the
-        // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
+        waitForScansToFinish(c);
+    }
+
+    // Don't allow splitting/closing if operations need read and write to same region are going on in the
+    // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
+    private void waitForScansToFinish(ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {
+        int maxWaitTime = c.getEnvironment().getConfiguration().getInt(HConstants.HBASE_CLIENT_OPERATION_TIMEOUT,
+            HConstants.DEFAULT_HBASE_CLIENT_OPERATION_TIMEOUT);
+        long start = EnvironmentEdgeManager.currentTimeMillis();
         synchronized (lock) {
             isRegionClosingOrSplitting = true;
-            if (scansReferenceCount > 0) {
-                throw new IOException("Operations like local index building/delete/upsert select"
-                        + " might be going on so not allowing to split.");
+            while (scansReferenceCount > 0) {
+                try {
+                    lock.wait(1000);
+                    if (EnvironmentEdgeManager.currentTimeMillis() - start >= maxWaitTime) {
+                        isRegionClosingOrSplitting = false; // must reset in case split is not retried
+                        throw new IOException(String.format(
+                            "Operations like local index building/delete/upsert select"
+                                    + " might be going on so not allowing to split/close. scansReferenceCount=%s region=%s",
+                            scansReferenceCount,
+                            c.getEnvironment().getRegionInfo().getRegionNameAsString()));
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
     }
@@ -1343,16 +1393,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @Override
     public void preClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested)
             throws IOException {
-        synchronized (lock) {
-            isRegionClosingOrSplitting = true;
-            while (scansReferenceCount > 0) {
-                try {
-                    lock.wait(1000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-        }
+        waitForScansToFinish(c);
     }
 
     @Override
@@ -1387,6 +1428,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                             + fullTableName);
                                 Scan scan = new Scan();
                                 scan.setMaxVersions();
+
+                                // close the passed scanner since we are returning a brand-new one
+                                try {
+                                    if (s != null) {
+                                        s.close();
+                                    }
+                                } catch (IOException ignore) {}
+
                                 return new StoreScanner(store, store.getScanInfo(), scan, scanners,
                                     ScanType.COMPACT_RETAIN_DELETES, store.getSmallestReadPoint(),
                                     HConstants.OLDEST_TIMESTAMP);

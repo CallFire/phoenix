@@ -71,7 +71,7 @@ import com.google.protobuf.RpcCallback;
 public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
     private PhoenixMetaDataControllerEnvironment env;
-    private ArrayList<BaseMasterAndRegionObserver> accessControllers;
+    private volatile ArrayList<BaseMasterAndRegionObserver> accessControllers;
     private boolean accessCheckEnabled;
     private UserProvider userProvider;
     public static final Log LOG = LogFactory.getLog(PhoenixAccessController.class);
@@ -406,7 +406,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                 final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
                 try (Connection connection = ConnectionFactory.createConnection(env.getConfiguration())) {
                     // Merge permissions from all accessController coprocessors loaded in memory
-                    for (BaseMasterAndRegionObserver service : accessControllers) {
+                    for (BaseMasterAndRegionObserver service : getAccessControllers()) {
                         // Use AccessControlClient API's if the accessController is an instance of org.apache.hadoop.hbase.security.access.AccessController
                         if (service.getClass().getName().equals(org.apache.hadoop.hbase.security.access.AccessController.class.getName())) {
                             userPermissions.addAll(AccessControlClient.getUserPermissions(connection, tableName.getNameAsString()));

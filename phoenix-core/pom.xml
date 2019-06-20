@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.14.1-cdh5.14.2-cf.5</version>
+    <version>4.14.2-cdh5.14.4-cf</version>
   </parent>
   <artifactId>phoenix-core</artifactId>
   <name>Phoenix Core</name>
@@ -26,6 +26,7 @@
 
   <properties>
     <top.dir>${project.basedir}/..</top.dir>
+    <argparse4j.version>0.8.1</argparse4j.version>
   </properties>
 
   <build>
@@ -237,6 +238,12 @@
       <groupId>sqlline</groupId>
       <artifactId>sqlline</artifactId>
     </dependency>
+    <dependency>
+      <groupId>net.sourceforge.argparse4j</groupId>
+      <artifactId>argparse4j</artifactId>
+      <version>${argparse4j.version}</version>
+    </dependency>
+
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
