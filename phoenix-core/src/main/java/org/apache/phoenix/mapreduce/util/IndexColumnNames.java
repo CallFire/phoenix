@@ -172,13 +172,11 @@ public class IndexColumnNames {
     }
 
     public String getQualifiedDataTableName() {
-        return SchemaUtil.getQualifiedTableName(pdataTable.getSchemaName().getString(),
-            pdataTable.getTableName().getString());
+        return "\"" + pdataTable.getSchemaName().getString() + "\".\"" + pdataTable.getTableName().getString() + "\"";
     }
 
     public String getQualifiedIndexTableName() {
-        return SchemaUtil.getQualifiedTableName(pindexTable.getSchemaName().getString(),
-            pindexTable.getTableName().getString());
+        return "\"" + pindexTable.getSchemaName().getString() + "\".\"" + pindexTable.getTableName().getString() + "\"";
     }
 
     /**
