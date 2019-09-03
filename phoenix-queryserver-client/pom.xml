@@ -27,7 +27,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.14.2-cdh5.14.4-cf.1</version>
+    <version>4.14.2-cdh5.14.4-cf.2</version>
   </parent>
   <artifactId>phoenix-queryserver-client</artifactId>
   <name>Phoenix Query Server Client</name>
@@ -101,7 +101,6 @@
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>META-INF/license/*</exclude>
-                    <exclude>META-INF/services/javax.servlet.ServletContainerInitializer</exclude>
                     <exclude>LICENSE.*</exclude>
                     <exclude>NOTICE.*</exclude>
                   </excludes>
@@ -147,6 +146,9 @@
                 <relocation>
                   <pattern>javax.servlet</pattern>
                   <shadedPattern>${shaded.package}.javax.servlet</shadedPattern>
+                  <!--<excludes>-->
+                    <!--<exclude>javax.servlet.ServletContainerInitializer</exclude>-->
+                  <!--</excludes>-->
                 </relocation>
                 <relocation>
                   <pattern>javax.el</pattern>
@@ -218,6 +220,10 @@
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpcore</artifactId>
       <version>4.4.4</version>
+    </dependency>
+    <dependency>
+      <groupId>javax.servlet</groupId>
+      <artifactId>javax.servlet-api</artifactId>
     </dependency>
   </dependencies>
 </project>
