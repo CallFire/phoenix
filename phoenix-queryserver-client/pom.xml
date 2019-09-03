@@ -101,6 +101,7 @@
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>META-INF/license/*</exclude>
+                    <exclude>META-INF/services/javax.servlet.ServletContainerInitializer</exclude>
                     <exclude>LICENSE.*</exclude>
                     <exclude>NOTICE.*</exclude>
                   </excludes>
