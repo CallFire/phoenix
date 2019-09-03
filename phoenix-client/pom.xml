@@ -27,7 +27,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.14.2-cdh5.14.4-cf</version>
+    <version>4.14.2-cdh5.14.4-cf.1</version>
   </parent>
   <artifactId>phoenix-client</artifactId>
   <name>Phoenix Client</name>

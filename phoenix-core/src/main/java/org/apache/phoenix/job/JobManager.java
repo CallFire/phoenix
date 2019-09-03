@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.job;
 
+import static org.apache.commons.lang.exception.ExceptionUtils.getStackTrace;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_REJECTED_TASK_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_EXECUTED_COUNTER;
@@ -39,6 +40,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 /**
@@ -50,7 +53,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  */
 @SuppressWarnings("rawtypes")
 public class JobManager<T> extends AbstractRoundRobinQueue<T> {
-	
+    protected static final Logger LOG = LoggerFactory.getLogger(JobManager.class);
+
     private static final AtomicLong PHOENIX_POOL_INDEX = new AtomicLong(1);
 	
     public JobManager(int maxSize) {
@@ -70,7 +74,7 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         public TaskExecutionMetricsHolder getTaskExecutionMetric();
     }
 
-    public static ThreadPoolExecutor createThreadPoolExec(int keepAliveMs, int size, int queueSize, boolean useInstrumentedThreadPool) {
+    public static ThreadPoolExecutor createThreadPoolExec(int keepAliveMs, int size, final int queueSize, boolean useInstrumentedThreadPool) {
         BlockingQueue<Runnable> queue;
         if (queueSize == 0) {
             queue = new SynchronousQueue<Runnable>(); // Specialized for 0 length.
@@ -103,7 +107,7 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
             exec = new ThreadPoolExecutor(size, size, keepAliveMs, TimeUnit.MILLISECONDS, queue, threadFactory) {
                 @Override
                 protected <T> RunnableFuture<T> newTaskFor(Callable<T> call) {
-                    // Override this so we can create a JobFutureTask so we can extract out the parentJobId (otherwise, in the default FutureTask, it is private). 
+                    // Override this so we can create a JobFutureTask so we can extract out the parentJobId (otherwise, in the default FutureTask, it is private).
                     return new JobFutureTask<T>(call);
                 }
         
@@ -164,16 +168,19 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
          */
         private final long taskSubmissionTime;
 
-        // Time at which the task is about to be executed. 
+        // Time at which the task is about to be executed.
         private long taskExecutionStartTime;
+        private final Exception exception;
 
         public InstrumentedJobFutureTask(Runnable r, T t) {
             super(r, t);
+            this.exception = new RuntimeException();
             this.taskSubmissionTime = System.currentTimeMillis();
         }
 
         public InstrumentedJobFutureTask(Callable<T> c) {
             super(c);
+            this.exception = new RuntimeException();
             this.taskSubmissionTime = System.currentTimeMillis();
         }
         
@@ -185,6 +192,10 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         
         public long getTaskSubmissionTime() {
             return taskSubmissionTime;
+        }
+
+        public String getStackAddedFrom() {
+            return getStackTrace(exception);
         }
         
         public long getTaskExecutionStartTime() {
@@ -200,7 +211,6 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         public Object getJobId();
         public TaskExecutionMetricsHolder getTaskExecutionMetric();
     }
-
 
     /**
      * Extension of the default thread factory returned by {@code Executors.defaultThreadFactory}
@@ -241,6 +251,18 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
                     metrics.getNumRejectedTasks().increment();
                 }
                 GLOBAL_REJECTED_TASK_COUNTER.increment();
+                BlockingQueue<Runnable> queue = executor.getQueue();
+                StringBuilder b = new StringBuilder(queue.size() * 500);
+                int size = 0;
+                for (Runnable task : queue) {
+                    size++;
+                    b.append("\n\nTask added from:\n");
+                    b.append(((InstrumentedJobFutureTask) task).getStackAddedFrom());
+                    if (size > 500) {
+                        break;
+                    }
+                }
+                LOG.warn("task rejected from pool, which has first 0.5K tasks added from: {}", b.toString());
                 throw new RejectedExecutionException("Task " + r.toString() + " rejected from " + executor.toString());
             }
         };

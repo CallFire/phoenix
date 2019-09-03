@@ -494,8 +494,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
             final String indexTable) throws SQLException {
         final DatabaseMetaData dbMetaData = connection.getMetaData();
         final String schemaName = SchemaUtil.getSchemaNameFromFullName(masterTable);
-        final String tableName =
-                SchemaUtil.normalizeIdentifier(SchemaUtil.getTableNameFromFullName(masterTable));
+        final String tableName = SchemaUtil.getTableNameFromFullName(masterTable);
 
         ResultSet rs = null;
         try {

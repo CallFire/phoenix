@@ -3459,7 +3459,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             // Query for the latest table first, since it's not cached
             table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientVersion);
             if ((table != null && table.getTimeStamp() < clientTimeStamp) || 
-                    (blockWriteRebuildIndex && table.getIndexDisableTimestamp() > 0)) {
+                    (blockWriteRebuildIndex && table != null && table.getIndexDisableTimestamp() > 0)) {
                 return table;
             }
             // Otherwise, query for an older version of the table - it won't be cached
