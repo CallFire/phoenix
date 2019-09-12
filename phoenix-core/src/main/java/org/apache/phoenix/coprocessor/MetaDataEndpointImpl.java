@@ -944,17 +944,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         PIndexState indexState =
                 indexStateKv == null ? null : PIndexState.fromSerializedValue(indexStateKv
                         .getValueArray()[indexStateKv.getValueOffset()]);
-        // If client is not yet up to 4.12, then translate PENDING_ACTIVE to ACTIVE (as would have been
-        // the value in those versions) since the client won't have this index state in its enum.
-        if (indexState == PIndexState.PENDING_ACTIVE && clientVersion < MetaDataProtocol.MIN_PENDING_ACTIVE_INDEX) {
-            indexState = PIndexState.ACTIVE;
-        }
-        // If client is not yet up to 4.14, then translate PENDING_DISABLE to DISABLE
-        // since the client won't have this index state in its enum.
-        if (indexState == PIndexState.PENDING_DISABLE && clientVersion < MetaDataProtocol.MIN_PENDING_DISABLE_INDEX) {
-            // note: for older clients, we have to rely on the rebuilder to transition PENDING_DISABLE -> DISABLE
-            indexState = PIndexState.DISABLE;
-        }
         Cell immutableRowsKv = tableKeyValues[IMMUTABLE_ROWS_INDEX];
         boolean isImmutableRows =
                 immutableRowsKv == null ? false : (Boolean) PBoolean.INSTANCE.toObject(
@@ -1077,6 +1066,30 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 indexDisableTimestamp, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, storageScheme, encodingScheme, cqCounter, useStatsForParallelization);
     }
     
+    private PTable modifyIndexStateForOldClient(int clientVersion, PTable table)
+            throws SQLException {
+        if (table == null) {
+            return table;
+        }
+        // PHOENIX-5073 Sets the index state based on the client version in case of old clients.
+        // If client is not yet up to 4.12, then translate PENDING_ACTIVE to ACTIVE (as would have
+        // been the value in those versions) since the client won't have this index state in its
+        // enum.
+        if (table.getIndexState() == PIndexState.PENDING_ACTIVE
+                && clientVersion < MetaDataProtocol.MIN_PENDING_ACTIVE_INDEX) {
+            table = PTableImpl.makePTable(table, PIndexState.ACTIVE);
+        }
+        // If client is not yet up to 4.14, then translate PENDING_DISABLE to DISABLE
+        // since the client won't have this index state in its enum.
+        if (table.getIndexState() == PIndexState.PENDING_DISABLE
+                && clientVersion < MetaDataProtocol.MIN_PENDING_DISABLE_INDEX) {
+            // note: for older clients, we have to rely on the rebuilder to transition
+            // PENDING_DISABLE -> DISABLE
+            table = PTableImpl.makePTable(table, PIndexState.DISABLE);
+        }
+        return table;
+    }
+
     private boolean isQualifierCounterKV(Cell kv) {
         int cmp =
                 Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(),
@@ -1605,13 +1618,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             done.run(builder.build());
                             return;
                         }
-                        // make sure we haven't gone over our threshold for indexes on this table.
-                        if (execeededIndexQuota(tableType, parentTable)) {
-                            builder.setReturnCode(MetaDataProtos.MutationCode.TOO_MANY_INDEXES);
-                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                            done.run(builder.build());
-                            return;
-                        }
                         long parentTableSeqNumber;
                         if (tableType == PTableType.VIEW && viewPhysicalTableRow != null && request.hasClientVersion()) {
                             // Starting 4.5, the client passes the sequence number of the physical table in the table metadata.
@@ -1658,7 +1664,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 }
-                
+
+                if (parentTableName != null) {
+                    // make sure we haven't gone over our threshold for indexes on this table.
+                    if (execeededIndexQuota(tableType, parentTable)) {
+                        builder.setReturnCode(MetaDataProtos.MutationCode.TOO_MANY_INDEXES);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
+                    }
+                }
+
                 // Add cell for ROW_KEY_ORDER_OPTIMIZABLE = true, as we know that new tables
                 // conform the correct row key. The exception is for a VIEW, which the client
                 // sends over depending on its base physical table.
@@ -2153,7 +2169,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         EnvironmentEdgeManager.currentTimeMillis(), null);
             }
 
-            if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
+            if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM || tableType == PTableType.VIEW) {
                 // Handle any child views that exist
                 TableViewFinder tableViewFinderResult = findChildViews(region, tenantId, table, clientVersion, !isCascade);
                 if (tableViewFinderResult.hasViews()) {
@@ -2175,7 +2191,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                 acquireLock(region, viewKey, locks);
                                 MetaDataMutationResult result = doDropTable(viewKey, viewTenantId, viewSchemaName,
                                         viewName, null, PTableType.VIEW, rowsToDelete, invalidateList, locks,
-                                        tableNamesToDelete, sharedTablesToDelete, false, clientVersion);
+                                        tableNamesToDelete, sharedTablesToDelete, true, clientVersion);
                                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) { return result; }
                             }
                         }
@@ -3427,6 +3443,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             // Try cache again in case we were waiting on a lock
             table = (PTable)metaDataCache.getIfPresent(cacheKey);
+            table = modifyIndexStateForOldClient(clientVersion, table);
             // We only cache the latest, so we'll end up building the table with every call if the
             // client connection has specified an SCN.
             // TODO: If we indicate to the client that we're returning an older version, but there's
@@ -3885,7 +3902,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         newState = PIndexState.DISABLE;
                     }
                 }
-                if (newState == PIndexState.PENDING_DISABLE && currentState != PIndexState.PENDING_DISABLE) {
+                if (newState == PIndexState.PENDING_DISABLE && currentState != PIndexState.PENDING_DISABLE && currentState != PIndexState.INACTIVE) {
                     // reset count for first PENDING_DISABLE
                     newKVs.add(KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
                             PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES, timeStamp, Bytes.toBytes(0L)));
@@ -3902,6 +3919,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             newKVs.remove(disableTimeStampKVIndex);
                             newKVs.set(indexStateKVIndex, KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
                                     INDEX_STATE_BYTES, timeStamp, Bytes.toBytes(newState.getSerializedValue())));
+                        } else if (disableTimeStampKVIndex == -1) { // clear disableTimestamp if client didn't pass it in
+                            newKVs.add(KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
+                                PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES, timeStamp, PLong.INSTANCE.toBytes(0)));
+                            disableTimeStampKVIndex = newKVs.size() - 1;
                         }
                     } else if (newState == PIndexState.DISABLE) {
                         //reset the counter for pending disable when transitioning from PENDING_DISABLE to DISABLE
