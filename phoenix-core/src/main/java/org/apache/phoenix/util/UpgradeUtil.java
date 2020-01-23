@@ -438,7 +438,7 @@ public class UpgradeUtil {
                 StringBuilder createIndex = new StringBuilder("CREATE LOCAL INDEX ");
                 createIndex.append(indexTableName);
                 createIndex.append(" ON ");
-                createIndex.append(SchemaUtil.getTableName(schemaName, dataTableName));
+                createIndex.append(SchemaUtil.getTableName(schemaName, dataTableName).replace(':', '.'));
                 createIndex.append("(");
                 for (int i = 0; i < indexedColumns.size(); i++) {
                     createIndex.append(indexedColumns.get(i));

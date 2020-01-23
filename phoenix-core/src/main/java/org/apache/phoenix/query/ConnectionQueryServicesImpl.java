@@ -3544,7 +3544,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     + PhoenixDatabaseMetaData.TASK_END_TS + " " + PTimestamp.INSTANCE.getSqlTypeName() + ", "
                                     + PhoenixDatabaseMetaData.TASK_PRIORITY + " " + PUnsignedTinyint.INSTANCE.getSqlTypeName() + ", "
                                     + PhoenixDatabaseMetaData.TASK_DATA + " " + PVarchar.INSTANCE.getSqlTypeName();
-                    String taskTableFullName = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TASK_TABLE);
+                    String taskTableFullName = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TASK_TABLE).replace(':', '.');
                     metaConnection =
                             addColumnsIfNotExists(metaConnection, taskTableFullName,
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
